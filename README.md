@@ -32,7 +32,7 @@ fixes:
 # 1. Build the training image (~20 GB, one-time)
 docker build -t piper-train .
 
-# 2. Lay out your training dir (default: ~\voice-training)
+# 2. Lay out your training dir (default: ~\.easy-piper-training)
 #    piper_dataset\wavs\*.wav         mono 22050 Hz 16-bit PCM
 #    piper_dataset\metadata.csv       id|text|text  (LJSpeech style)
 #    checkpoints\<base-or-resume>.ckpt

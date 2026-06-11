@@ -26,7 +26,10 @@ Usage (CPU-only, safe while the GPU trains):
       --target-wav target.wav --target-text "What the target says."
 
 Bare names resolve against --exports-dir. Pass --corpus FILE (lines of
-"category|sentence") to replace the built-in corpus. Numbers are for
+"category|sentence") to replace the built-in corpus. Pass
+--reference-wavs NAME=DIR to add a column scored from pre-rendered
+clips (e.g. another TTS engine's take on the same corpus; files must
+be named <idx:02d>_*.wav matching corpus row order). Numbers are for
 TRENDS between checkpoints of the same voice — don't compare across
 different voices/datasets. The final call is always your ears; the
 report page is built for exactly that.
@@ -195,15 +198,31 @@ def resolve_model(arg: str) -> Path:
     sys.exit(f"can't find model {arg!r} (looked in {ARGS.exports_dir})")
 
 
-def evaluate(models: list[Path]) -> dict:
+def read_wav(path: Path) -> tuple[np.ndarray, int]:
+    with wave.open(str(path), "rb") as w:
+        sr = w.getframerate()
+        audio = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16)
+    return audio, sr
+
+
+def load_reference_clip(ref_dir: Path, idx: int) -> tuple[np.ndarray, int]:
+    matches = sorted(ref_dir.glob(f"{idx:02d}_*.wav"))
+    if not matches:
+        sys.exit(f"reference dir {ref_dir} has no clip for corpus row {idx:02d} "
+                 f"(expected {idx:02d}_*.wav — same corpus/order required)")
+    return read_wav(matches[0])
+
+
+def evaluate(models: list, references: list[tuple[str, Path]]) -> dict:
     out_dir = ARGS.out
     results: dict = {}
-    for m in models:
-        name = m.stem
+    columns = [(m.stem, m) for m in models] + [(n, d) for n, d in references]
+    for name, src in columns:
+        is_ref = isinstance(src, Path) and src.is_dir()
         print(f"\n=== {name} ===")
         rows = []
         for idx, (cat, text) in enumerate(CORPUS):
-            audio, sr = synthesize(m, text)
+            audio, sr = load_reference_clip(src, idx) if is_ref else synthesize(src, text)
             slug = re.sub(r"[^a-z0-9]+", "-", cat)[:20]
             wav_path = out_dir / name / f"{idx:02d}_{slug}.wav"
             write_wav(wav_path, audio, sr)
@@ -289,8 +308,10 @@ def main():
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("models", nargs="+", help="ONNX paths or bare names in --exports-dir")
-    ap.add_argument("--exports-dir", type=Path, default=Path("exports"))
-    ap.add_argument("--out", type=Path, default=Path("eval"))
+    ap.add_argument("--exports-dir", type=Path,
+                default=Path.home() / ".easy-piper-training" / "exports")
+    ap.add_argument("--out", type=Path,
+                default=Path.home() / ".easy-piper-training" / "eval")
     ap.add_argument("--target-wav", type=Path, default=None,
                     help="reference sample of the voice being chased (enables target_sim)")
     ap.add_argument("--target-text", default=None,
@@ -299,6 +320,9 @@ def main():
     ap.add_argument("--corpus", type=Path, default=None,
                     help="file of 'category|sentence' lines replacing the built-in corpus")
     ap.add_argument("--whisper-model", default="small")
+    ap.add_argument("--reference-wavs", action="append", default=[],
+                    metavar="NAME=DIR",
+                    help="add a column scored from pre-rendered <idx>_*.wav clips")
     ARGS = ap.parse_args()
 
     if ARGS.target_wav and not ARGS.target_wav.exists():
@@ -317,8 +341,17 @@ def main():
         CORPUS.insert(0, ("target", ARGS.target_text))
 
     models = [resolve_model(a) for a in ARGS.models]
+    references = []
+    for spec in ARGS.reference_wavs:
+        if "=" not in spec:
+            sys.exit(f"--reference-wavs wants NAME=DIR, got {spec!r}")
+        n, d = spec.split("=", 1)
+        d = Path(d)
+        if not d.is_dir():
+            sys.exit(f"reference dir not found: {d}")
+        references.append((n, d))
     ARGS.out.mkdir(parents=True, exist_ok=True)
-    results = evaluate(models)
+    results = evaluate(models, references)
     (ARGS.out / "results.json").write_text(json.dumps(results, indent=2), encoding="utf-8")
     write_report(results)
     print(f"\nreport: {ARGS.out / 'report.html'}")

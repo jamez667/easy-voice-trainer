@@ -31,7 +31,7 @@
 # but NOT training; `docker stop <container>` for that.
 
 param(
-    [string]$TrainingDir = "$HOME\voice-training",
+    [string]$TrainingDir = "$HOME\.easy-piper-training",
     [string]$VoiceName = "voice",
     [string]$ContainerName = "${ContainerName}",
     [string]$Image = "piper-train",

@@ -7,7 +7,7 @@
 # Writes <TrainingDir>\exports\<ckpt-name>.onnx (+ the voice's
 # .onnx.json copied alongside — Piper inference needs the pair).
 param(
-    [string]$TrainingDir = "$HOME\voice-training",
+    [string]$TrainingDir = "$HOME\.easy-piper-training",
     [string]$VoiceName = "voice",
     [string]$Image = "piper-train",
     [string]$CkptName = ""
