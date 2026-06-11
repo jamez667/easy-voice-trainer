@@ -1,0 +1,18 @@
+# training artifacts
+checkpoints/
+exports/
+eval/
+piper_dataset/
+piper_cache/
+lightning_logs/
+*.ckpt
+*.onnx
+*.wav
+
+# python
+__pycache__/
+*.pyc
+.venv/
+
+# logs
+watchdog.log
