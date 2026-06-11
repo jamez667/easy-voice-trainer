@@ -28,26 +28,66 @@ fixes:
 
 ## Quick start
 
+Training needs an NVIDIA GPU (the image is CUDA). Lay out the training
+dir (default: `~/.easy-voice-trainer`) the same way on every platform:
+
+```
+piper_dataset/wavs/*.wav         mono 22050 Hz 16-bit PCM
+piper_dataset/metadata.csv       id|text|text  (LJSpeech style)
+checkpoints/<base-or-resume>.ckpt
+<voice>.onnx.json                written by piper on first run
+```
+
+### Windows (WSL2 Docker)
+
 ```powershell
-# 1. Build the training image (~20 GB, one-time)
-docker build -t piper-train .
+docker build -t piper-train .                                  # ~20 GB, one-time
 
-# 2. Lay out your training dir (default: ~\.easy-piper-training)
-#    piper_dataset\wavs\*.wav         mono 22050 Hz 16-bit PCM
-#    piper_dataset\metadata.csv       id|text|text  (LJSpeech style)
-#    checkpoints\<base-or-resume>.ckpt
-#    <voice>.onnx.json                written by piper on first run
-
-# 3. Train — the watchdog launches and babysits the run
+# Train — the watchdog launches and babysits the run
 powershell -File watchdog.ps1 -VoiceName myvoice -MaxEpochs 8000
 
-# 4. Export a checkpoint to ONNX
+# Export a checkpoint to ONNX
 powershell -File export_checkpoint.ps1 -VoiceName myvoice
+```
 
-# 5. Evaluate checkpoints against each other (and a target sample)
-python eval_voice.py exports\epoch=A.onnx exports\epoch=B.onnx `
+### Linux (NVIDIA GPU + nvidia-container-toolkit)
+
+```bash
+docker build -t piper-train .
+
+# Train — resumes from the newest checkpoint, restarts on crash,
+# halves batch on CUDA OOM
+./train.sh myvoice                       # MAX_EPOCHS=9000 ./train.sh myvoice
+
+# Export a checkpoint to ONNX
+./export.sh myvoice
+```
+
+There's no spill watchdog on Linux because the trap it guards against
+doesn't exist there: WDDM's silent paging of CUDA into system RAM is
+Windows/WSL2 behaviour. On native Linux an oversubscribed batch fails
+fast with a real `CUDA out of memory` — `train.sh` catches that and
+halves the batch.
+
+### macOS
+
+No CUDA, so **training doesn't run on Macs** — train on a Linux or
+Windows box (or rent a GPU) and pull the checkpoints over. The **eval
+suite is fully supported** (CPU-only):
+
+```bash
+pip install piper-tts faster-whisper librosa speechmos resemblyzer "setuptools<81" numpy
+python3 eval_voice.py exports/epoch=A.onnx exports/epoch=B.onnx \
     --target-wav target.wav --target-text "What the target sample says."
-# -> eval\report.html with audio players + metrics
+```
+
+### Evaluate (all platforms, CPU-only)
+
+```bash
+python eval_voice.py exports/epoch=A.onnx exports/epoch=B.onnx \
+    --target-wav target.wav --target-text "What the target sample says."
+# -> ~/.easy-voice-trainer/eval/report.html with audio players + metrics
+# Compare against a pre-rendered engine: --reference-wavs name=DIR
 ```
 
 ## The shared-memory trap (read this once)
@@ -72,9 +112,10 @@ lever** — dataloader workers only affect CPU-side loading.
 | File | What it does |
 |---|---|
 | `Dockerfile` | piper1-gpl + CUDA training image (pinned, reproducible, includes the torch `weights_only` shim old checkpoints need) |
-| `watchdog.ps1` | launches training and auto-recovers from spill/stall/crash; decision logic is a pure function |
+| `watchdog.ps1` | Windows: launches training and auto-recovers from spill/stall/crash; decision logic is a pure function |
 | `watchdog.Tests.ps1` | Pester 5 suite for every watchdog rule (no GPU/Docker needed) |
-| `export_checkpoint.ps1` | checkpoint → ONNX via the same image |
+| `train.sh` | Linux: launch + crash-resume + OOM batch-halving (no spill guard needed — see above) |
+| `export_checkpoint.ps1` / `export.sh` | checkpoint → ONNX via the same image |
 | `eval_voice.py` | objective A/B: target-speaker similarity (resemblyzer), WER (faster-whisper), DNSMOS, rate/clipping/silence + HTML listening report |
 | `filter_dataset.py` | drop glitched clips (silence, cutoffs, abnormal rate) before training |
 | `prepare_dataset.py` | resample/normalize/trim raw clips into LJSpeech layout |

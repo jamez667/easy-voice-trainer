@@ -309,9 +309,9 @@ def main():
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("models", nargs="+", help="ONNX paths or bare names in --exports-dir")
     ap.add_argument("--exports-dir", type=Path,
-                default=Path.home() / ".easy-piper-training" / "exports")
+                default=Path.home() / ".easy-voice-trainer" / "exports")
     ap.add_argument("--out", type=Path,
-                default=Path.home() / ".easy-piper-training" / "eval")
+                default=Path.home() / ".easy-voice-trainer" / "eval")
     ap.add_argument("--target-wav", type=Path, default=None,
                     help="reference sample of the voice being chased (enables target_sim)")
     ap.add_argument("--target-text", default=None,
