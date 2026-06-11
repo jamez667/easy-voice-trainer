@@ -1,0 +1,5 @@
+# Shell scripts must stay LF — CRLF breaks bash ("\r: command not found").
+*.sh text eol=lf
+*.py text eol=lf
+*.ps1 text
+* text=auto
